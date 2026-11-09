@@ -1,0 +1,43 @@
+# Exécutables compilés
+/cachelab
+/cachelab.exe
+/bin/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Fichiers de test
+*.test
+*.out
+coverage.out
+coverage.html
+
+# Secrets et configuration locale (IMPORTANT)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Données de persistance locales (si tu ajoutes un snapshot)
+*.rdb
+*.aof
+/data/
+
+# Dépendances vendorisées (seulement si tu n'utilises pas vendor/)
+# /vendor/
+
+# Éditeurs et IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Fichiers système
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+/logs/
