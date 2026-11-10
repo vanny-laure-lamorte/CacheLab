@@ -8,30 +8,38 @@ import (
 )
 
 func main() {
-
 	// Create an HTTP client with a timeout
-	client := &http.Client{Timeout: 5 * time.Second}
+	client := &http.Client{
+		Timeout: 5 * time.Second,
+	}
 
 	// Define the routes
 	routes := []string{
-		"/",
-		"/about"}
+		"/about",
+	}
 
 	// Iterate over the routes and make GET requests
 	for _, route := range routes {
 		resp, err := client.Get("http://localhost:8080" + route)
 		if err != nil {
-			fmt.Println("Erreur :", err)
+			fmt.Println("[ERROR] Erreur :", err)
 			return
 		}
 
 		body, err := io.ReadAll(resp.Body)
 		resp.Body.Close()
+
 		if err != nil {
-			fmt.Println("Erreur de lecture :", err)
+			fmt.Println("[ERROR] Erreur de lecture :", err)
 			return
 		}
 
-		fmt.Printf("GET %s -> %d : %s", route, resp.StatusCode, body)
+		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+			fmt.Printf("[SUCCESS] GET %s -> %d : %s\n",
+				route, resp.StatusCode, body)
+		} else {
+			fmt.Printf("[WARNING] GET %s -> %d : %s\n",
+				route, resp.StatusCode, body)
+		}
 	}
 }
