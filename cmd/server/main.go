@@ -1,10 +1,12 @@
 package main
 
 import (
-    "fmt"
-    "net/http"
-    "encoding/json"
-    "sync"
+	"encoding/json"
+	"fmt"
+	"net"
+	"net/http"
+	"sync"
+	apidocs "github.com/vanny-laure-lamorte/CacheLab/docs"
 )
 
 type pair struct {
@@ -87,7 +89,23 @@ func getKeyHandler(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, pair{Key: key, Value: value})
 }
 
-
+func docsHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	fmt.Fprint(w, `<!DOCTYPE html>
+	<html>
+	<head>
+	<title>CacheLab API</title>
+	<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14/swagger-ui.css">
+	</head>
+	<body>
+	<div id="swagger-ui"></div>
+	<script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14/swagger-ui-bundle.js"></script>
+	<script>
+		SwaggerUIBundle({ url: "/openapi.yaml", dom_id: "#swagger-ui" });
+	</script>
+	</body>
+	</html>`)
+}
 
 func main() {
 
@@ -95,11 +113,17 @@ func main() {
     http.HandleFunc("/about", aboutHandler)
     http.HandleFunc("POST /keys", createKeyHandler)
 	http.HandleFunc("GET /keys/{key}", getKeyHandler)
+	http.HandleFunc("GET /docs", docsHandler)
+	http.Handle("GET /openapi.yaml", http.FileServer(http.FS(apidocs.OpenAPI)))
 
-    fmt.Println("Server running on :8080")
+	listener, err := net.Listen("tcp", ":8080")
+	if err != nil {
+		fmt.Println("Error starting server:", err)
+		return
+	}
 
-    err := http.ListenAndServe(":8080", nil)
-    if err != nil {
-        fmt.Println("Error starting server:", err)
-    }
+	fmt.Println("Server running on :8080")
+	if err := http.Serve(listener, nil); err != nil {
+		fmt.Println("Error serving HTTP:", err)
+	}
 }

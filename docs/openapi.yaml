@@ -1,0 +1,46 @@
+openapi: 3.0.3
+info:
+  title: CacheLab API
+  version: 0.1.0
+servers:
+  - url: http://localhost:8080
+paths:
+  /keys:
+    post:
+      summary: Créer une clé
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [key, value]
+              properties:
+                key:
+                  type: string
+                  example: prix_42
+                value:
+                  type: string
+                  example: "19.99"
+      responses:
+        "201":
+          description: Clé créée
+        "400":
+          description: JSON invalide ou clé manquante
+        "409":
+          description: La clé existe déjà
+  /keys/{key}:
+    get:
+      summary: Lire une clé
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+          example: prix_42
+      responses:
+        "200":
+          description: Valeur trouvée
+        "404":
+          description: Clé introuvable
