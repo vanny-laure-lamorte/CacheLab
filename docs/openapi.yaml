@@ -71,3 +71,17 @@ paths:
           description: JSON invalide
         "404":
           description: Clé introuvable
+    delete:
+      summary: Supprimer une clé
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+          example: prix_42
+      responses:
+        "204":
+          description: Clé supprimée
+        "404":
+          description: Clé introuvable
