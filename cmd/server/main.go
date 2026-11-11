@@ -98,6 +98,27 @@ func (h *HashMap) UpdateKey(key string, value string) bool {
 	return false
 }
 
+// DeleteKey removes a key.
+// Returns false if the key does not exist.
+func (h *HashMap) DeleteKey(key string) bool {
+	index := h.hashFunction(key)
+	var prev *Entry
+
+	for entry := h.buckets[index]; entry != nil; entry = entry.Next {
+		if entry.Key == key {
+			if prev == nil {
+				h.buckets[index] = entry.Next // first of the chain
+			} else {
+				prev.Next = entry.Next // skip it
+			}
+			h.size--
+			return true
+		}
+		prev = entry
+	}
+	return false
+}
+
 // Len returns the number of stored keys.
 func (h *HashMap) Len() int {
 	return h.size
@@ -181,6 +202,24 @@ func updateKeyHandler(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, pair{Key: key, Value: p.Value})
 }
 
+/*
+* DELETE /keys/{key} removes a key.
+* Returns 404 if the key does not exist, 204 otherwise.
+ */
+func deleteKeyHandler(w http.ResponseWriter, r *http.Request) {
+	key := r.PathValue("key")
+
+	mu.Lock()
+	ok := table.DeleteKey(key)
+	mu.Unlock()
+
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "clé introuvable"})
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // docsHandler serves the Swagger UI page, which reads /openapi.yaml.
 func docsHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -205,6 +244,7 @@ func main() {
 	http.HandleFunc("POST /keys", createKeyHandler)
 	http.HandleFunc("GET /keys/{key}", getKeyHandler)
 	http.HandleFunc("PUT /keys/{key}", updateKeyHandler)
+	http.HandleFunc("DELETE /keys/{key}", deleteKeyHandler)
 	http.HandleFunc("GET /docs", docsHandler)
 	http.Handle("GET /openapi.yaml", http.FileServer(http.FS(apidocs.OpenAPI)))
 
