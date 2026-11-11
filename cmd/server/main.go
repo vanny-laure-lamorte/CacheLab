@@ -37,7 +37,7 @@ type HashMap struct {
 }
 
 func aboutHandler(w http.ResponseWriter, r *http.Request) {
-    fmt.Fprintln(w, "Server working.")
+	fmt.Fprintln(w, "Server working.")
 }
 
 // NewHashMap creates an empty HashMap with the given number of buckets.
@@ -84,6 +84,18 @@ func (h *HashMap) GetKey(key string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+// UpdateKey replaces the value of an existing key.
+// Returns false if the key does not exist (nothing is created).
+func (h *HashMap) UpdateKey(key string, value string) bool {
+	for entry := h.buckets[h.hashFunction(key)]; entry != nil; entry = entry.Next {
+		if entry.Key == key {
+			entry.Value = value
+			return true
+		}
+	}
+	return false
 }
 
 // Len returns the number of stored keys.
@@ -145,6 +157,30 @@ func getKeyHandler(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, pair{Key: key, Value: value})
 }
 
+/*
+* PUT /keys/{key} replaces the value of an existing key.
+* Returns 400 if the JSON is invalid, 404 if the key does not exist, 200 otherwise.
+ */
+func updateKeyHandler(w http.ResponseWriter, r *http.Request) {
+	key := r.PathValue("key")
+
+	var p pair
+	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "JSON invalide"})
+		return
+	}
+
+	mu.Lock()
+	ok := table.UpdateKey(key, p.Value)
+	mu.Unlock()
+
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "clé introuvable"})
+		return
+	}
+	writeJSON(w, http.StatusOK, pair{Key: key, Value: p.Value})
+}
+
 // docsHandler serves the Swagger UI page, which reads /openapi.yaml.
 func docsHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -168,6 +204,7 @@ func main() {
 	http.HandleFunc("/about", aboutHandler)
 	http.HandleFunc("POST /keys", createKeyHandler)
 	http.HandleFunc("GET /keys/{key}", getKeyHandler)
+	http.HandleFunc("PUT /keys/{key}", updateKeyHandler)
 	http.HandleFunc("GET /docs", docsHandler)
 	http.Handle("GET /openapi.yaml", http.FileServer(http.FS(apidocs.OpenAPI)))
 

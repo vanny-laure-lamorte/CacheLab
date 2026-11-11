@@ -44,3 +44,30 @@ paths:
           description: Valeur trouvée
         "404":
           description: Clé introuvable
+    put:
+      summary: Modifier la valeur d'une clé existante
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+          example: prix_42
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [value]
+              properties:
+                value:
+                  type: string
+                  example: "24.99"
+      responses:
+        "200":
+          description: Valeur modifiée
+        "400":
+          description: JSON invalide
+        "404":
+          description: Clé introuvable
