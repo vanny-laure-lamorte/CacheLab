@@ -34,6 +34,10 @@ func sendRequest(method, route, body string) int {
 	return resp.StatusCode
 }
 
+/*
+* checkResponseStatus checks if the received HTTP status code matches the expected status code.
+* It increments the total request count and the successful request count if they match.
+ */
 func checkResponseStatus(got, want int, ok, total *int) {
 	*total++
 	if got == want {
@@ -41,6 +45,11 @@ func checkResponseStatus(got, want int, ok, total *int) {
 	}
 }
 
+/*
+* runScenario runs a series of HTTP requests to test the key-value store.
+* It creates, retrieves, updates, and deletes keys, checking the response status codes.
+* It measures the time taken to complete all requests and prints the results.
+ */
 func runScenario(n int) {
 	ok, total := 0, 0
 	start := time.Now()
@@ -60,6 +69,10 @@ func runScenario(n int) {
 	fmt.Printf("%4d clés : %4d/%4d requêtes OK en %v\n", n, ok, total, elapsed.Round(time.Millisecond))
 }
 
+/*
+* main is the entry point of the client application.
+* It runs the test scenarios for different numbers of keys.
+ */
 func main() {
 
 	for _, n := range []int{1, 10, 100, 1000} {
