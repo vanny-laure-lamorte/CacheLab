@@ -266,6 +266,10 @@ func runResizeMilestones() {
 	ui.println(`Check the server terminal for "[HashMap] resized" logs to confirm the table grew.`)
 }
 
+/*
+* main is the entry point of the client application.
+* It runs the test scenarios for different numbers of keys.
+ */
 func main() {
 	if configuredURL := os.Getenv("CACHELAB_URL"); configuredURL != "" {
 		baseURL = strings.TrimRight(configuredURL, "/")
