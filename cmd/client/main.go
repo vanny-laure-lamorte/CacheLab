@@ -54,11 +54,17 @@ func runScenario(n int) {
 	ok, total := 0, 0
 	start := time.Now()
 
+	// 1. Create all keys (the table fills up → resize)
+	for i := 0; i < n; i++ {
+		key := fmt.Sprintf("test-%d-%d", n, i)
+		checkResponseStatus(sendRequest("POST", "/keys", fmt.Sprintf(`{"key":"%s","value":"v%d"}`, key, i)), 201, &ok, &total)
+	}
+
+	// 2. Read, update, delete, check deletion
 	for i := 0; i < n; i++ {
 		key := fmt.Sprintf("test-%d-%d", n, i)
 		path := "/keys/" + key
 
-		checkResponseStatus(sendRequest("POST", "/keys", fmt.Sprintf(`{"key":"%s","value":"v%d"}`, key, i)), 201, &ok, &total)
 		checkResponseStatus(sendRequest("GET", path, ""), 200, &ok, &total)
 		checkResponseStatus(sendRequest("PUT", path, `{"value":"updated"}`), 200, &ok, &total)
 		checkResponseStatus(sendRequest("DELETE", path, ""), 204, &ok, &total)
@@ -75,7 +81,7 @@ func runScenario(n int) {
  */
 func main() {
 
-	for _, n := range []int{1, 10, 100, 1000} {
+	for _, n := range []int{1000, 5000, 10000, 15000, 25000} {
 		runScenario(n)
 	}
 }

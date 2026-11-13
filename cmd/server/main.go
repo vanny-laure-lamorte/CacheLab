@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"sync"
+	"time"
 
 	apidocs "github.com/vanny-laure-lamorte/CacheLab/docs"
 )
@@ -50,9 +51,10 @@ func NewHashMap(bucketCount int, resizeEnabled bool) *HashMap {
 	if bucketCount < 1 {
 		bucketCount = 16
 	}
+	fmt.Printf("[HashMap] created: %d buckets (resize: %v)\n", bucketCount, resizeEnabled)
 	return &HashMap{
-		buckets: make([]*Entry, bucketCount),
-		seed:    maphash.MakeSeed(),
+		buckets:       make([]*Entry, bucketCount),
+		seed:          maphash.MakeSeed(),
 		resizeEnabled: resizeEnabled,
 	}
 }
@@ -62,32 +64,36 @@ func (h *HashMap) hashFunction(key string) uint {
 	return uint(maphash.String(h.seed, key) % uint64(len(h.buckets)))
 }
 
-// resize doubles the number of buckets and rehashes all existing entries.
+// loadFactor returns the fill rate of the table: keys / buckets.
 func (h *HashMap) loadFactor() float64 {
 	return float64(h.size) / float64(len(h.buckets))
 }
 
-// resize doubles the number of buckets and rehashes all existing entries.
+// needsResize tells if the table must grow: resize enabled and too full.
 func (h *HashMap) needsResize() bool {
 	return h.resizeEnabled && h.loadFactor() > maxLoadFactor
 }
 
 // resize doubles the number of buckets and moves every entry to its new bucket.
 func (h *HashMap) resize() {
-    oldBuckets := h.buckets
-    h.buckets = make([]*Entry, len(oldBuckets)*2)
+	start := time.Now()
+	oldBuckets := h.buckets
+	h.buckets = make([]*Entry, len(oldBuckets)*2)
 
-    for _, entry := range oldBuckets {
-        for entry != nil {
-            next := entry.Next
+	for _, entry := range oldBuckets {
+		for entry != nil {
+			next := entry.Next
 
-            index := h.hashFunction(entry.Key)
-            entry.Next = h.buckets[index]
-            h.buckets[index] = entry
+			index := h.hashFunction(entry.Key)
+			entry.Next = h.buckets[index]
+			h.buckets[index] = entry
 
-            entry = next
-        }
-    }
+			entry = next
+		}
+	}
+	elapsed := time.Since(start)
+	fmt.Printf("[HashMap] resized: %d -> %d buckets, %d keys moved in %.3f ms\n",
+		len(oldBuckets), len(h.buckets), h.size, float64(elapsed.Microseconds())/1000)
 }
 
 // CreateKey adds a new pair.
