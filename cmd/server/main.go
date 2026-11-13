@@ -15,8 +15,12 @@ import (
 // maxLoadFactor is the maximum load factor before resizing the hash map.
 const maxLoadFactor = 0.75
 
+// maxLoadFactor is the maximum load factor before resizing the hash map.
+const maxLoadFactor = 0.75
+
 var (
 	mu    sync.RWMutex
+	table = NewHashMap(8, true)
 	table = NewHashMap(8, true)
 )
 
@@ -40,6 +44,8 @@ type HashMap struct {
 	seed    maphash.Seed
 
 	resizeEnabled bool
+
+	resizeEnabled bool
 }
 
 func aboutHandler(w http.ResponseWriter, r *http.Request) {
@@ -48,13 +54,14 @@ func aboutHandler(w http.ResponseWriter, r *http.Request) {
 
 // NewHashMap creates an empty HashMap with the given number of buckets.
 func NewHashMap(bucketCount int, resizeEnabled bool) *HashMap {
+func NewHashMap(bucketCount int, resizeEnabled bool) *HashMap {
 	if bucketCount < 1 {
 		bucketCount = 16
 	}
 	fmt.Printf("[HashMap] created: %d buckets (resize: %v)\n", bucketCount, resizeEnabled)
 	return &HashMap{
-		buckets:       make([]*Entry, bucketCount),
-		seed:          maphash.MakeSeed(),
+		buckets: make([]*Entry, bucketCount),
+		seed:    maphash.MakeSeed(),
 		resizeEnabled: resizeEnabled,
 	}
 }
@@ -64,36 +71,32 @@ func (h *HashMap) hashFunction(key string) uint {
 	return uint(maphash.String(h.seed, key) % uint64(len(h.buckets)))
 }
 
-// loadFactor returns the fill rate of the table: keys / buckets.
+// resize doubles the number of buckets and rehashes all existing entries.
 func (h *HashMap) loadFactor() float64 {
 	return float64(h.size) / float64(len(h.buckets))
 }
 
-// needsResize tells if the table must grow: resize enabled and too full.
+// resize doubles the number of buckets and rehashes all existing entries.
 func (h *HashMap) needsResize() bool {
 	return h.resizeEnabled && h.loadFactor() > maxLoadFactor
 }
 
 // resize doubles the number of buckets and moves every entry to its new bucket.
 func (h *HashMap) resize() {
-	start := time.Now()
-	oldBuckets := h.buckets
-	h.buckets = make([]*Entry, len(oldBuckets)*2)
+    oldBuckets := h.buckets
+    h.buckets = make([]*Entry, len(oldBuckets)*2)
 
-	for _, entry := range oldBuckets {
-		for entry != nil {
-			next := entry.Next
+    for _, entry := range oldBuckets {
+        for entry != nil {
+            next := entry.Next
 
-			index := h.hashFunction(entry.Key)
-			entry.Next = h.buckets[index]
-			h.buckets[index] = entry
+            index := h.hashFunction(entry.Key)
+            entry.Next = h.buckets[index]
+            h.buckets[index] = entry
 
-			entry = next
-		}
-	}
-	elapsed := time.Since(start)
-	fmt.Printf("[HashMap] resized: %d -> %d buckets, %d keys moved in %.3f ms\n",
-		len(oldBuckets), len(h.buckets), h.size, float64(elapsed.Microseconds())/1000)
+            entry = next
+        }
+    }
 }
 
 // CreateKey adds a new pair.
