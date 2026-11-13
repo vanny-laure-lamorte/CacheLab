@@ -11,9 +11,12 @@ import (
 	apidocs "github.com/vanny-laure-lamorte/CacheLab/docs"
 )
 
+// maxLoadFactor is the maximum load factor before resizing the hash map.
+const maxLoadFactor = 0.75
+
 var (
 	mu    sync.RWMutex
-	table = NewHashMap(8)
+	table = NewHashMap(8, true)
 )
 
 // pair is the JSON format exchanged with the client.
@@ -34,6 +37,8 @@ type HashMap struct {
 	buckets []*Entry
 	size    int
 	seed    maphash.Seed
+
+	resizeEnabled bool
 }
 
 func aboutHandler(w http.ResponseWriter, r *http.Request) {
@@ -41,19 +46,48 @@ func aboutHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // NewHashMap creates an empty HashMap with the given number of buckets.
-func NewHashMap(bucketCount int) *HashMap {
+func NewHashMap(bucketCount int, resizeEnabled bool) *HashMap {
 	if bucketCount < 1 {
 		bucketCount = 16
 	}
 	return &HashMap{
 		buckets: make([]*Entry, bucketCount),
 		seed:    maphash.MakeSeed(),
+		resizeEnabled: resizeEnabled,
 	}
 }
 
 // hashFunction returns the bucket index of a key, in the range [0, number of buckets).
 func (h *HashMap) hashFunction(key string) uint {
 	return uint(maphash.String(h.seed, key) % uint64(len(h.buckets)))
+}
+
+// resize doubles the number of buckets and rehashes all existing entries.
+func (h *HashMap) loadFactor() float64 {
+	return float64(h.size) / float64(len(h.buckets))
+}
+
+// resize doubles the number of buckets and rehashes all existing entries.
+func (h *HashMap) needsResize() bool {
+	return h.resizeEnabled && h.loadFactor() > maxLoadFactor
+}
+
+// resize doubles the number of buckets and moves every entry to its new bucket.
+func (h *HashMap) resize() {
+    oldBuckets := h.buckets
+    h.buckets = make([]*Entry, len(oldBuckets)*2)
+
+    for _, entry := range oldBuckets {
+        for entry != nil {
+            next := entry.Next
+
+            index := h.hashFunction(entry.Key)
+            entry.Next = h.buckets[index]
+            h.buckets[index] = entry
+
+            entry = next
+        }
+    }
 }
 
 // CreateKey adds a new pair.
@@ -72,6 +106,10 @@ func (h *HashMap) CreateKey(key string, value string) bool {
 	// Insert the new entry at the beginning of the linked list in the bucket
 	h.buckets[index] = &Entry{Key: key, Value: value, Next: h.buckets[index]}
 	h.size++
+
+	if h.needsResize() {
+		h.resize()
+	}
 
 	return true
 }
@@ -107,9 +145,9 @@ func (h *HashMap) DeleteKey(key string) bool {
 	for entry := h.buckets[index]; entry != nil; entry = entry.Next {
 		if entry.Key == key {
 			if prev == nil {
-				h.buckets[index] = entry.Next // first of the chain
+				h.buckets[index] = entry.Next
 			} else {
-				prev.Next = entry.Next // skip it
+				prev.Next = entry.Next
 			}
 			h.size--
 			return true
