@@ -1,10 +1,72 @@
 openapi: 3.0.3
 info:
   title: CacheLab API
-  version: 0.1.0
+  version: 0.2.0
 servers:
   - url: http://localhost:8080
 paths:
+  /mode:
+    get:
+      summary: Lire la version utilisée
+      responses:
+        "200":
+          description: Version courante et nombre de clés
+          content:
+            application/json:
+              example:
+                mode: normal
+                keys: 0
+    put:
+      summary: Changer de version (la table repart vide)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mode]
+              properties:
+                mode:
+                  type: string
+                  enum: [normal, recursive]
+                  example: recursive
+      responses:
+        "200":
+          description: Version changée
+        "400":
+          description: JSON invalide ou mode inconnu
+  /bench:
+    get:
+      summary: Mesurer un algorithme côté serveur (sans HTTP pendant la mesure)
+      parameters:
+        - name: mode
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [normal, recursive]
+          example: normal
+        - name: size
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 5000000
+          example: 100000
+      responses:
+        "200":
+          description: Temps par opération (ns) et mémoire utilisée (Mo)
+          content:
+            application/json:
+              example:
+                mode: normal
+                size: 100000
+                create_ns_per_op: 210.5
+                get_ns_per_op: 95.2
+                memory_mb: 8.4
+        "400":
+          description: Mode ou taille invalide
   /keys:
     post:
       summary: Créer une clé
