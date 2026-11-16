@@ -16,8 +16,9 @@ const defaultBaseURL = "http://localhost:8080"
 
 var (
 	baseURL  = defaultBaseURL
-	client   = &http.Client{Timeout: 10 * time.Second}
+	client   = &http.Client{Timeout: 2 * time.Minute} // long enough for /bench
 	inputEOF bool
+	modes    = []string{"normal", "recursive"}
 )
 
 type keyValue struct {
@@ -65,6 +66,33 @@ func requestAndPrint(method, route, body string) {
 func keyRoute(key string) string {
 	return "/keys/" + url.PathEscape(key)
 }
+
+// showMode prints the current version and its number of keys.
+func showMode() {
+	requestAndPrint(http.MethodGet, "/mode", "")
+}
+
+// setMode switches the server to "normal" or "recursive" (the table starts empty).
+func setMode(mode string) bool {
+	body, err := json.Marshal(map[string]string{"mode": mode})
+	if err != nil {
+		ui.printf("Failed to prepare JSON: %v\n", err)
+		return false
+	}
+	status, responseBody, err := sendRequest(http.MethodPut, "/mode", string(body))
+	if err != nil {
+		ui.printf("Failed to switch to %q: %v\n", mode, err)
+		return false
+	}
+	if status != http.StatusOK {
+		ui.printf("Failed to switch to %q: HTTP %d %s\n", mode, status, strings.TrimSpace(responseBody))
+		return false
+	}
+	ui.printf("Mode: %s (empty table)\n", mode)
+	return true
+}
+
+// Manual CRUD
 
 func createKey() {
 	key := readLine("Key: ")
@@ -143,6 +171,8 @@ func runRouteChecks() {
 		{name: "PUT /keys/{key} (missing key)", method: http.MethodPut, route: keyRoute(missingKey), body: `{"value":"x"}`, want: http.StatusNotFound},
 		{name: "DELETE /keys/{key}", method: http.MethodDelete, route: keyRoute(key), want: http.StatusNoContent},
 		{name: "DELETE /keys/{key} (missing key)", method: http.MethodDelete, route: keyRoute(missingKey), want: http.StatusNotFound},
+		{name: "GET /mode", method: http.MethodGet, route: "/mode", want: http.StatusOK},
+		{name: "PUT /mode (unknown mode)", method: http.MethodPut, route: "/mode", body: `{"mode":"x"}`, want: http.StatusBadRequest},
 		{name: "GET /docs", method: http.MethodGet, route: "/docs", want: http.StatusOK},
 		{name: "GET /openapi.yaml", method: http.MethodGet, route: "/openapi.yaml", want: http.StatusOK},
 	}
@@ -165,110 +195,112 @@ func runRouteChecks() {
 	ui.printf("Routes: %d/%d checks passed in %v\n", ok, total, time.Since(start).Round(time.Millisecond))
 }
 
+// benchKey returns the name of the i-th test key.
+func benchKey(i int) string {
+	return fmt.Sprintf("bench-%d", i)
+}
+
+// createKeys creates count keys (bench-0, bench-1...) and returns the number of errors.
+// onCreated is called after each key (can be nil).
+func createKeys(count int, onCreated func(created int)) int {
+	failed := 0
+	for i := 0; i < count; i++ {
+		body, err := json.Marshal(keyValue{Key: benchKey(i), Value: "v"})
+		if err != nil {
+			failed++
+			continue
+		}
+		status, _, err := sendRequest(http.MethodPost, "/keys", string(body))
+		if err != nil || status != http.StatusCreated {
+			failed++
+			continue
+		}
+		if onCreated != nil {
+			onCreated(i + 1)
+		}
+	}
+	return failed
+}
+
 func runResizeTest(count int) {
-	if count < 7 {
-		ui.println("Choose at least 7 keys to trigger a resize with an empty table.")
+	if !setMode("normal") { // empty table, so the resizes happen again
 		return
 	}
-
-	prefix := fmt.Sprintf("client-resize-%d-", time.Now().UnixNano())
-	created := make([]string, 0, count)
 	start := time.Now()
-	failed := 0
+	failed := createKeys(count, nil)
 
-	for i := 0; i < count; i++ {
-		key := fmt.Sprintf("%s%d", prefix, i)
-		body, err := json.Marshal(keyValue{Key: key, Value: "resize-test"})
-		if err != nil {
-			ui.printf("Failed to prepare JSON: %v\n", err)
-			failed++
-			continue
-		}
-		status, responseBody, err := sendRequest(http.MethodPost, "/keys", string(body))
-		if err != nil {
-			ui.printf("Failed to create key %s: %v\n", key, err)
-			failed++
-			continue
-		}
-		if status != http.StatusCreated {
-			ui.printf("Failed to create key %s: HTTP %d %s\n", key, status, strings.TrimSpace(responseBody))
-			failed++
-			continue
-		}
-		created = append(created, key)
-	}
-
-	for _, key := range created {
-		status, _, err := sendRequest(http.MethodDelete, keyRoute(key), "")
-		if err != nil {
-			ui.printf("Failed to clean up key %s: %v\n", key, err)
-			failed++
-		} else if status != http.StatusNoContent {
-			ui.printf("Failed to clean up key %s: HTTP %d\n", key, status)
-			failed++
-		}
-	}
-
-	ui.printf("Resizing test: created %d/%d keys, %d error(s), cleanup completed in %v.\n",
-		len(created), count, failed, time.Since(start).Round(time.Millisecond))
+	ui.printf("Resizing test: created %d/%d keys, %d error(s) in %v.\n",
+		count-failed, count, failed, time.Since(start).Round(time.Millisecond))
 	ui.println(`Check the server terminal for "[HashMap] resized" logs to confirm the table grew.`)
 }
 
 func runResizeMilestones() {
 	const maxKeys = 25000
 
-	prefix := fmt.Sprintf("client-milestone-%d-", time.Now().UnixNano())
-	created := make([]string, 0, maxKeys)
+	if !setMode("normal") {
+		return
+	}
 	start := time.Now()
-	failed := 0
 	nextMilestone := 1000
 
-	for i := 0; i < maxKeys; i++ {
-		key := fmt.Sprintf("%s%d", prefix, i)
-		body, err := json.Marshal(keyValue{Key: key, Value: "resize-test"})
-		if err != nil {
-			ui.printf("Failed to prepare JSON: %v\n", err)
-			failed++
-			continue
-		}
-		status, responseBody, err := sendRequest(http.MethodPost, "/keys", string(body))
-		if err != nil {
-			ui.printf("Failed to create key %s: %v\n", key, err)
-			failed++
-			continue
-		}
-		if status != http.StatusCreated {
-			ui.printf("Failed to create key %s: HTTP %d %s\n", key, status, strings.TrimSpace(responseBody))
-			failed++
-			continue
-		}
-		created = append(created, key)
-
-		if len(created) == nextMilestone {
-			ui.printf("%5d keys created in %v\n", nextMilestone, time.Since(start).Round(time.Millisecond))
+	failed := createKeys(maxKeys, func(created int) {
+		if created == nextMilestone {
+			ui.printf("%5d keys created in %v\n", created, time.Since(start).Round(time.Millisecond))
 			nextMilestone += 500
 		}
-	}
+	})
 
-	for _, key := range created {
-		status, _, err := sendRequest(http.MethodDelete, keyRoute(key), "")
-		if err != nil {
-			ui.printf("Failed to clean up key %s: %v\n", key, err)
-			failed++
-		} else if status != http.StatusNoContent {
-			ui.printf("Failed to clean up key %s: HTTP %d\n", key, status)
-			failed++
+	ui.printf("Resize milestones: created %d/%d keys, %d error(s), completed in %v.\n",
+		maxKeys-failed, maxKeys, failed, time.Since(start).Round(time.Millisecond))
+	ui.println(`Check the server terminal for "[HashMap] resized" logs to confirm the table grew.`)
+}
+
+type benchResult struct {
+	Mode          string  `json:"mode"`
+	Size          int     `json:"size"`
+	CreateNsPerOp float64 `json:"create_ns_per_op"`
+	GetNsPerOp    float64 `json:"get_ns_per_op"`
+	CreateTotalMs float64 `json:"create_total_ms"`
+	GetTotalMs    float64 `json:"get_total_ms"`
+	MemoryMB      float64 `json:"memory_mb"`
+	DurationMs    float64 `json:"duration_ms"`
+}
+
+// runServerBenchmark asks the server to measure every mode for every size.
+func runServerBenchmark() {
+	ui.println("Server benchmark (median of 3 runs, no HTTP during the measure):")
+	ui.printf("%-9s %9s | %12s | %12s | %10s | %10s | %10s\n",
+		"mode", "keys", "create ns/op", "create total", "get ns/op", "get total", "memory")
+	totalMs := 0.0
+	for _, size := range []int{1000, 100000, 1000000} {
+		for _, mode := range modes {
+			route := fmt.Sprintf("/bench?mode=%s&size=%d", url.QueryEscape(mode), size)
+			status, body, err := sendRequest(http.MethodGet, route, "")
+			if err != nil {
+				ui.printf("Error: %v\n", err)
+				return
+			}
+			if status != http.StatusOK {
+				ui.printf("HTTP %d %s\n", status, strings.TrimSpace(body))
+				return
+			}
+
+			var r benchResult
+			if err := json.Unmarshal([]byte(body), &r); err != nil {
+				ui.printf("Invalid response: %v\n", err)
+				return
+			}
+			ui.printf("%-9s %9d | %12.1f | %9.3f ms | %10.1f | %7.3f ms | %7.1f Mo\n",
+				r.Mode, r.Size, r.CreateNsPerOp, r.CreateTotalMs, r.GetNsPerOp, r.GetTotalMs, r.MemoryMB)
+			totalMs += r.DurationMs
 		}
 	}
-
-	ui.printf("Resize milestones: created and cleaned up %d/%d keys, %d error(s), completed in %v.\n",
-		len(created), maxKeys, failed, time.Since(start).Round(time.Millisecond))
-	ui.println(`Check the server terminal for "[HashMap] resized" logs to confirm the table grew.`)
+	ui.printf("Benchmark completed in %.1f s (server time)\n", totalMs/1000)
 }
 
 /*
 * main is the entry point of the client application.
-* It runs the test scenarios for different numbers of keys.
+* It shows an interactive menu to test the API and compare the versions.
  */
 func main() {
 	if configuredURL := os.Getenv("CACHELAB_URL"); configuredURL != "" {
@@ -303,6 +335,12 @@ func main() {
 			runResizeTest(1000)
 		case "9":
 			runResizeMilestones()
+		case "m":
+			setMode(readLine("Mode (normal / recursive): "))
+		case "s":
+			showMode()
+		case "b":
+			runServerBenchmark()
 		case "0":
 			ui.println("Goodbye.")
 			return
