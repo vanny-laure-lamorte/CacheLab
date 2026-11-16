@@ -146,10 +146,33 @@ La configuration peut être adaptée au fur et à mesure de l'évolution du proj
 Depuis le répertoire racine du projet, exécuter :
 
 ```bash
-go run .
+go run ./cmd/server
 ```
 
 Le serveur démarre sur le port configuré, ou sur le port `8080` par défaut.
+
+### Lancer le client interactif
+
+Dans un autre terminal, à la racine du projet, exécuter :
+
+```bash
+go run ./cmd/client
+```
+
+Le menu permet de créer, lire, modifier et supprimer des clés, de tester toutes
+les routes, et de récupérer le schéma OpenAPI. L'option de resize demande le
+nombre de clés sans valeur par défaut (au moins 7). Une autre option crée
+progressivement jusqu'à 25 000 clés et affiche les étapes de 1 000, puis tous
+les 500 clés. Les clés créées pour les tests de resize sont supprimées à la fin ;
+les messages de resize sont visibles dans le terminal du serveur.
+
+L'URL par défaut est `http://localhost:8080`. Elle peut être configurée avant le
+lancement du client :
+
+```powershell
+$env:CACHELAB_URL="http://localhost:8081"
+go run ./cmd/client
+```
 
 Pour compiler le projet :
 
@@ -169,7 +192,8 @@ L'API REST permet de manipuler les paires clé/valeur du cache. Les données éc
 | `GET` | `/keys/{key}` | Récupérer la valeur d'une clé |
 | `PUT` | `/keys/{key}` | Modifier la valeur d'une clé existante |
 | `DELETE` | `/keys/{key}` | Supprimer une clé |
-| `GET` | `/keys` | Lister les clés stockées (fonctionnalité complémentaire) |
+| `GET` | `/docs` | Afficher la documentation interactive |
+| `GET` | `/openapi.yaml` | Récupérer le schéma OpenAPI |
 
 ### Créer une clé — POST /keys
 
@@ -231,15 +255,9 @@ curl -i -X DELETE http://localhost:8080/keys/produit:42
 
 En cas de suppression réussie, le statut HTTP `204 No Content` peut être retourné.
 
-### Lister les clés — GET /keys
-
-Exemple :
-
-```bash
-curl -i http://localhost:8080/keys
-```
-
-Cette route permet de récupérer la liste des clés présentes dans le cache. Elle constitue une fonctionnalité complémentaire au CRUD obligatoire.
+La route `GET /keys` n'est pas implémentée. Pour vérifier l'ensemble des routes
+exposées ainsi que les réponses d'erreur, lancer le client interactif avec
+`go run ./cmd/client`, puis choisir **Tester toutes les routes**.
 
 ### Codes HTTP
 
